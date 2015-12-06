@@ -1,4 +1,5 @@
 require 'bcrypt'
+require 'mongoid-locker'
 
 module DeviseTokenAuth::Concerns::User
   extend ActiveSupport::Concern
@@ -23,9 +24,9 @@ module DeviseTokenAuth::Concerns::User
       self.devise_modules.delete(:omniauthable)
     end
 
-    unless tokens_has_json_column_type?
-      serialize :tokens, JSON
-    end
+#    unless tokens_has_json_column_type?
+#      serialize :tokens, JSON
+#    end
 
     validates :email, presence: true, email: true, if: Proc.new { |u| u.provider == 'email' }
     validates_presence_of :uid, if: Proc.new { |u| u.provider != 'email' }
@@ -34,8 +35,8 @@ module DeviseTokenAuth::Concerns::User
     validate :unique_email_user, on: :create
 
     # can't set default on text fields in mysql, simulate here instead.
-    after_save :set_empty_token_hash
-    after_initialize :set_empty_token_hash
+#    after_save :set_empty_token_hash
+#    after_initialize :set_empty_token_hash
 
     # keep uid in sync with email
     before_save :sync_uid
@@ -152,7 +153,7 @@ module DeviseTokenAuth::Concerns::User
       updated_at and last_token and
 
       # ensure that previous token falls within the batch buffer throttle time of the last request
-      Time.parse(updated_at) > Time.now - DeviseTokenAuth.batch_request_buffer_throttle and
+      updated_at > Time.now - DeviseTokenAuth.batch_request_buffer_throttle and
 
       # ensure that the token is valid
       ::BCrypt::Password.new(last_token) == token
@@ -178,12 +179,12 @@ module DeviseTokenAuth::Concerns::User
       last_token: last_token,
       updated_at: Time.now
     }
-	
+
     max_clients = DeviseTokenAuth.max_number_of_devices
     while self.tokens.keys.length > 0 and max_clients < self.tokens.keys.length
       oldest_token = self.tokens.min_by { |cid, v| v[:expiry] || v["expiry"] }
       self.tokens.delete(oldest_token.first)
-    end	
+    end
 
     self.save!
 
